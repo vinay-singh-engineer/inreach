@@ -120,6 +120,14 @@ python inReach.py --version
 4. Click **Check** (single source) or **Check All Hosts** (iterates every loaded host)
 5. Results appear one-by-one as each check completes — no waiting for the full batch
 
+**Success:**
+
+![Web UI — success](static/success.png)
+
+**Failure:**
+
+![Web UI — failure](static/failure.png)
+
 ---
 
 ## Running tests
