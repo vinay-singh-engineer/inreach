@@ -122,6 +122,16 @@ python inReach.py --version
 
 ---
 
+## Running tests
+
+```bash
+pytest tests/ -v
+```
+
+24 unit tests covering `_clean_output`, `parse_hosts_file`, `check_local`, `run_check`, and version format. No network access required — remote calls are mocked.
+
+---
+
 ## Project structure
 
 ```
@@ -185,6 +195,6 @@ MIT — use freely, attribute appreciated.
 
 ---
 
-## Author
+## 💻 Author
 
 [Vinay Singh](https://vinay-singh-engineer.github.io)

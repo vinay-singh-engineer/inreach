@@ -6,3 +6,6 @@ flask>=2.3.0
 
 # CLI
 rich>=13.0.0
+
+# Dev / CI
+pytest>=7.0.0
