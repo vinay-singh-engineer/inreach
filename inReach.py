@@ -16,14 +16,12 @@ import sys
 import time
 from pathlib import Path
 
-from rich import box
 from rich.console import Console, ConsoleOptions, RenderResult
 from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.table import Table
 from rich.text import Text
 from rich.live import Live
-from rich.rule import Rule
 
 console = Console()
 
