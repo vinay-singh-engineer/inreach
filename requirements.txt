@@ -1,0 +1,8 @@
+# inReach — requirements
+# Covers both CLI (inReach.py) and Web (app.py)
+
+# Web
+flask>=2.3.0
+
+# CLI
+rich>=13.0.0

@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>inReach</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { -webkit-font-smoothing: antialiased; }
+    body { background: #000; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; }
+    .glass { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(20px); }
+    .field { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); transition: border-color .2s; color: rgba(255,255,255,0.8); }
+    .field:focus { border-color: rgba(255,255,255,0.35); outline: none; }
+    ::placeholder { color: rgba(255,255,255,0.2) !important; }
+    input, select, textarea { color-scheme: dark; }
+    .result-row { animation: fadeIn .25s ease; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+    select option { background: #1a1a1a; }
+    .tab-active { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.8); }
+    .tab-inactive { color: rgba(255,255,255,0.3); }
+    .tab-inactive:hover { color: rgba(255,255,255,0.55); }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col text-white/80">
+
+  <!-- Header -->
+  <header class="sticky top-0 z-10 bg-black/80 backdrop-blur px-5 py-3 flex items-center border-b border-white/[0.08]">
+    <span class="text-white font-semibold text-sm tracking-tight">inReach</span>
+  </header>
+
+  <!-- Main -->
+  <main class="flex-1 flex justify-center px-4 pt-6 pb-10">
+    <div class="w-full max-w-3xl space-y-3">
+
+      <!-- Form card -->
+      <div class="glass rounded-xl p-4 space-y-3">
+
+        <!-- Hosts panel -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <label class="text-xs uppercase tracking-widest text-sky-400">Hosts</label>
+            <span id="host-status" class="text-xs text-white/25"></span>
+          </div>
+          <div class="flex gap-1 text-xs">
+            <button id="tab-paste" onclick="setTab('paste')"
+              class="tab-active px-2.5 py-0.5 rounded transition text-xs">Paste list</button>
+            <button id="tab-file" onclick="setTab('file')"
+              class="tab-inactive px-2.5 py-0.5 rounded transition text-xs">From file</button>
+          </div>
+          <div id="pane-paste">
+            <textarea id="host-textarea" rows="3"
+              placeholder="One host per line&#10;10.0.0.1&#10;host2.example.com"
+              class="field w-full rounded-lg px-3 py-2 text-sm resize-none leading-relaxed"></textarea>
+          </div>
+          <div id="pane-file" style="display:none">
+            <input id="inv-path" type="text" placeholder="/path/to/ansible/inventory"
+              class="field w-full rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <button onclick="loadHosts()"
+            class="w-full bg-white/10 hover:bg-white/15 active:scale-95 text-white/70 text-xs py-1.5 rounded-lg transition">
+            Load Hosts
+          </button>
+        </div>
+
+        <div class="border-t border-white/[0.07]"></div>
+
+        <!-- Source · Destination · Port -->
+        <div class="grid grid-cols-3 gap-2">
+          <div class="space-y-1.5">
+            <label class="text-xs uppercase tracking-widest text-sky-400">Source</label>
+            <input id="source-input" type="text" list="source-list"
+              placeholder="localhost" value="localhost"
+              class="field w-full rounded-lg px-3 py-2 text-sm" />
+            <datalist id="source-list">
+              <option value="localhost"></option>
+            </datalist>
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-xs uppercase tracking-widest text-sky-400">Destination</label>
+            <input id="dest" type="text" placeholder="Host or IP"
+              class="field w-full rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-xs uppercase tracking-widest text-sky-400">Port</label>
+            <input id="port" type="number" placeholder="443" min="1" max="65535"
+              class="field w-full rounded-lg px-3 py-2 text-sm" />
+          </div>
+        </div>
+
+        <!-- Buttons -->
+        <div class="flex gap-2">
+          <button id="btn-check" onclick="checkOne()" disabled
+            class="flex-1 bg-white text-black font-semibold py-2 rounded-lg hover:bg-white/90 active:scale-95 transition text-sm disabled:opacity-25 disabled:cursor-not-allowed">
+            Check
+          </button>
+          <button id="btn-all" onclick="checkAll()" disabled
+            class="flex-1 bg-white/10 hover:bg-white/15 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed text-white/80 font-semibold py-2 rounded-lg transition text-sm">
+            Check All Hosts
+          </button>
+          <button onclick="resetAll()"
+            class="bg-white/5 hover:bg-white/10 active:scale-95 text-white/40 hover:text-white/60 font-semibold py-2 px-3 rounded-lg transition text-sm">
+            Reset
+          </button>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div id="results" style="display:none" class="space-y-2">
+        <div class="flex justify-between items-center text-xs text-white/25 px-1">
+          <span id="result-summary"></span>
+          <button onclick="clearResults()" class="hover:text-sky-400 transition">Clear</button>
+        </div>
+        <div id="result-list" class="space-y-1.5"></div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-white/[0.06] px-5 py-3 flex items-center justify-between text-white/20 text-xs">
+    <span>inReach &copy; 2026 Vinay Singh</span>
+    <span>v1.0.0</span>
+  </footer>
+
+<script>
+  let inventoryHosts = [];
+  let currentTab = 'paste';
+
+  function updateButtonStates() {
+    const hasDest = document.getElementById('dest').value.trim() !== '';
+    const hasPort = document.getElementById('port').value.trim() !== '';
+    document.getElementById('btn-check').disabled = !hasDest || !hasPort;
+    document.getElementById('btn-all').disabled = !hasDest || !hasPort || inventoryHosts.length === 0;
+  }
+
+  document.getElementById('dest').addEventListener('input', updateButtonStates);
+  document.getElementById('port').addEventListener('input', updateButtonStates);
+
+  function setTab(tab) {
+    currentTab = tab;
+    document.getElementById('pane-paste').style.display = tab === 'paste' ? 'block' : 'none';
+    document.getElementById('pane-file').style.display  = tab === 'file'  ? 'block' : 'none';
+    document.getElementById('tab-paste').className = (tab === 'paste' ? 'tab-active' : 'tab-inactive') + ' px-2.5 py-0.5 rounded transition text-xs';
+    document.getElementById('tab-file').className  = (tab === 'file'  ? 'tab-active' : 'tab-inactive') + ' px-2.5 py-0.5 rounded transition text-xs';
+  }
+
+  function showHostStatus(msg, ok) {
+    const el = document.getElementById('host-status');
+    el.textContent = msg;
+    el.style.color = ok ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)';
+  }
+
+  async function loadHosts() {
+    let hosts = [];
+    if (currentTab === 'paste') {
+      const raw = document.getElementById('host-textarea').value;
+      hosts = raw.split('\n').map(h => h.trim()).filter(h => h && !h.startsWith('#'));
+      if (hosts.length === 0) { showHostStatus('No hosts found in list', false); return; }
+    } else {
+      const path = document.getElementById('inv-path').value.trim();
+      if (!path) { showHostStatus('Enter an inventory file path', false); return; }
+      try {
+        const res = await fetch(`/api/hosts?inventory=${encodeURIComponent(path)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        hosts = await res.json();
+        if (hosts.length === 0) { showHostStatus('No hosts found in file', false); return; }
+      } catch (e) {
+        showHostStatus('Failed to read file: ' + e.message, false);
+        return;
+      }
+    }
+    inventoryHosts = hosts;
+    rebuildSelect(hosts);
+    updateButtonStates();
+    showHostStatus(`${hosts.length} host${hosts.length !== 1 ? 's' : ''} loaded`, true);
+  }
+
+  function rebuildSelect(hosts) {
+    const dl = document.getElementById('source-list');
+    dl.innerHTML = '<option value="localhost"></option>';
+    hosts.forEach(h => {
+      const opt = document.createElement('option');
+      opt.value = h;
+      dl.appendChild(opt);
+    });
+  }
+
+  function getSource() {
+    return document.getElementById('source-input').value.trim() || 'localhost';
+  }
+
+  function resultCard({ host, dest, port, success, message }) {
+    const src = host || 'localhost';
+    const marker = success ? 'reachable' : 'unreachable';
+    const borderCls = success ? 'border-emerald-500/40 bg-emerald-950/30' : 'border-red-500/40 bg-red-950/30';
+    const badge = success
+      ? '<span class="text-emerald-400 text-xs font-semibold tracking-wide">✔ REACHABLE</span>'
+      : '<span class="text-red-400 text-xs font-semibold tracking-wide">✘ UNREACHABLE</span>';
+    return `
+      <div class="result-row ${marker} glass ${borderCls} rounded-lg px-4 py-2.5 space-y-0.5">
+        <div class="flex justify-between items-center">
+          <span class="text-sm text-white/70">${src} &rarr; ${dest}:${port}</span>
+          ${badge}
+        </div>
+        <div class="text-xs text-white/25 truncate">${message}</div>
+      </div>`;
+  }
+
+  function setLoading(btn, state) {
+    btn.disabled = state;
+    btn.dataset.orig = btn.dataset.orig || btn.textContent.trim();
+    btn.textContent = state ? 'Checking…' : btn.dataset.orig;
+  }
+
+  async function checkOne() {
+    const btn = document.getElementById('btn-check');
+    const dest = document.getElementById('dest').value.trim();
+    const port = document.getElementById('port').value.trim();
+    const source = getSource();
+
+    setLoading(btn, true);
+    try {
+      const res = await fetch('/api/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source, destination: dest, port }),
+      });
+      const data = await res.json();
+      appendResult({ host: source, dest, port: port || '443', ...data });
+    } catch (e) {
+      alert('Request failed: ' + e.message);
+    } finally {
+      setLoading(btn, false);
+    }
+  }
+
+  async function checkAll() {
+    const btn = document.getElementById('btn-all');
+    const dest = document.getElementById('dest').value.trim();
+    const port = document.getElementById('port').value.trim();
+    const total = inventoryHosts.length;
+
+    btn.disabled = true;
+    btn.dataset.orig = btn.dataset.orig || btn.textContent.trim();
+
+    for (let i = 0; i < total; i++) {
+      const host = inventoryHosts[i];
+      btn.textContent = `Checking ${i + 1} / ${total}…`;
+      try {
+        const res = await fetch('/api/check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source: host, destination: dest, port }),
+        });
+        const data = await res.json();
+        appendResult({ host, dest, port: port || '443', ...data });
+      } catch (e) {
+        appendResult({ host, dest, port: port || '443', success: false, message: e.message });
+      }
+    }
+
+    btn.disabled = false;
+    btn.textContent = btn.dataset.orig;
+    updateButtonStates();
+  }
+
+  function appendResult(data) {
+    document.getElementById('results').style.display = 'block';
+    document.getElementById('result-list').insertAdjacentHTML('afterbegin', resultCard(data));
+    updateSummary();
+  }
+
+  function updateSummary() {
+    const cards = document.querySelectorAll('#result-list .result-row');
+    const ok = [...cards].filter(c => c.classList.contains('reachable')).length;
+    document.getElementById('result-summary').textContent =
+      `${cards.length} check${cards.length !== 1 ? 's' : ''} — ${ok} reachable, ${cards.length - ok} failed`;
+  }
+
+  function resetAll() {
+    document.getElementById('host-textarea').value = '';
+    document.getElementById('inv-path').value = '';
+    document.getElementById('source-input').value = 'localhost';
+    document.getElementById('dest').value = '';
+    document.getElementById('port').value = '';
+    inventoryHosts = [];
+    document.getElementById('source-list').innerHTML = '<option value="localhost"></option>';
+    showHostStatus('', true);
+    updateButtonStates();
+    clearResults();
+  }
+
+  function clearResults() {
+    document.getElementById('result-list').innerHTML = '';
+    document.getElementById('results').style.display = 'none';
+  }
+</script>
+</body>
+</html>
