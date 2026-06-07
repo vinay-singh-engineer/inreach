@@ -7,6 +7,8 @@ Examples:
     python inReach.py --source myhost --destination google.com --port 443
     python inReach.py --sourceFile /path/to/hosts --destination google.com --port 443
     python inReach.py --source host1 --sourceFile /path/to/hosts --destination google.com
+    python inReach.py --sourceFile /path/to/hosts --destination google.com --parallel
+    python inReach.py --sourceFile /path/to/hosts --destination google.com --parallel --workers 8
 """
 
 import argparse
@@ -14,6 +16,7 @@ import socket
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from rich.console import Console, ConsoleOptions, RenderResult
@@ -166,7 +169,7 @@ def single_mode(source: str, dest: str, port: int):
     console.print()
 
 
-def multi_mode(pairs: list[tuple[str, str]], port: int):
+def multi_mode(pairs: list[tuple[str, str]], port: int, parallel: bool = False, workers: int = 5):
     dests = list(dict.fromkeys(dst for _, dst in pairs))
     dest_str = ", ".join(dests)
 
@@ -186,12 +189,20 @@ def multi_mode(pairs: list[tuple[str, str]], port: int):
 
     print_result_header(col_src)
 
-    for i, (source, dest) in enumerate(pairs, 1):
-        with Live(_CheckLine(source, dest, port, col_src, i, total), console=console, refresh_per_second=12, transient=True):
-            ok, msg = run_check(source, dest, port)
-
-        results.append((source, dest, ok, msg))
-        print_result_row(source, dest, port, ok, msg, col_src)
+    if parallel:
+        with ThreadPoolExecutor(max_workers=min(total, workers)) as executor:
+            future_to_pair = {executor.submit(run_check, src, dst, port): (src, dst) for src, dst in pairs}
+            for future in as_completed(future_to_pair):
+                src, dst = future_to_pair[future]
+                ok, msg = future.result()
+                results.append((src, dst, ok, msg))
+                print_result_row(src, dst, port, ok, msg, col_src)
+    else:
+        for i, (source, dest) in enumerate(pairs, 1):
+            with Live(_CheckLine(source, dest, port, col_src, i, total), console=console, refresh_per_second=12, transient=True):
+                ok, msg = run_check(source, dest, port)
+            results.append((source, dest, ok, msg))
+            print_result_row(source, dest, port, ok, msg, col_src)
 
     # Summary
     passed = sum(1 for *_, ok, _ in results if ok)
@@ -235,7 +246,9 @@ def print_help():
     args_table.add_row("-d, --destination",  "Destination host or IP",    "[red]required[/red]")
     args_table.add_row("-s, --source",       "Source host",               "default: localhost")
     args_table.add_row("-p, --port",         "Port number",               "default: 443")
-    args_table.add_row("-f, --sourceFile",         "Hosts file (one per line or Ansible inventory)", "optional")
+    args_table.add_row("-f, --sourceFile",   "Hosts file (one per line or Ansible inventory)", "optional")
+    args_table.add_row("-w, --workers",      "Max concurrent checks",     "default: 5")
+    args_table.add_row("    --parallel",     "Run checks in parallel",    "default: sequential")
     args_table.add_row("-v, --version",      "Show version and exit",     "")
     args_table.add_row("-h, --help",         "Show this help message",    "")
 
@@ -251,6 +264,8 @@ def print_help():
     ex_table.add_row("python inReach.py --source myhost --destination google.com --port 443")
     ex_table.add_row("python inReach.py --sourceFile /path/to/hosts --destination google.com --port 443")
     ex_table.add_row("python inReach.py --source myhost --sourceFile /path/to/hosts --destination google.com")
+    ex_table.add_row("python inReach.py --sourceFile /path/to/hosts --destination google.com --parallel")
+    ex_table.add_row("python inReach.py --sourceFile /path/to/hosts --destination google.com --parallel --workers 8")
 
     console.print("  [bold bright_black]Examples[/bold bright_black]")
     console.print(ex_table)
@@ -270,6 +285,8 @@ def main():
     parser.add_argument("--destination", "-d", default=None,          help="Destination host(s) — comma-separated for multiple")
     parser.add_argument("--port",        "-p", type=int, default=443, help="Port (default: 443)")
     parser.add_argument("--sourceFile",  "-f", default=None,          help="Path to hosts file (one host per line or Ansible inventory)")
+    parser.add_argument("--workers",     "-w", type=int, default=5,   help="Max concurrent checks (default: 5)")
+    parser.add_argument("--parallel",         action="store_true",    help="Run checks in parallel (default: sequential)")
 
     args = parser.parse_args()
 
@@ -293,7 +310,7 @@ def main():
     if len(pairs) == 1:
         single_mode(pairs[0][0], pairs[0][1], args.port)
     else:
-        multi_mode(pairs, args.port)
+        multi_mode(pairs, args.port, parallel=args.parallel, workers=args.workers)
 
 
 if __name__ == "__main__":

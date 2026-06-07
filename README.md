@@ -29,7 +29,7 @@ python inReach.py --source host01.example.com  --destination google.com --port 4
 **CLI — many hosts from a file:**
 
 ```bash
-python inReach.py --sourceFile hosts.txt --destination google.com,8.8.8.8 --port 443
+python inReach.py --sourceFile /path/to/inventory --destination google.com,8.8.8.8 --port 443
 ```
 
 ```
@@ -44,6 +44,27 @@ python inReach.py --sourceFile hosts.txt --destination google.com,8.8.8.8 --port
 │ Unreachable 2 │
 ╰───────────────╯
 ```
+
+**CLI — parallel mode (large inventories):**
+
+```bash
+python inReach.py --sourceFile /path/to/inventory --destination google.com --port 443 --parallel
+```
+
+```
+ ✔   host04.example.com   google.com:443     ● REACHABLE   Connected in 42ms
+ ✔   host01.example.com   google.com:443     ● REACHABLE   Connected in 55ms
+ ✘   host03.example.com   google.com:443     ● UNREACHABLE Timed out
+ ✔   host02.example.com   google.com:443     ● REACHABLE   Connected in 61ms
+
+╭─ Summary ─────╮
+│ Total       4 │
+│ Reachable   3 │
+│ Unreachable 1 │
+╰───────────────╯
+```
+
+> Results arrive out of order — fastest checks print first. Use `--workers N` to control concurrency (default: 5).
 
 **Web UI:**
 
@@ -95,7 +116,12 @@ python inReach.py --source myhost.example.com --destination google.com --port 44
 python inReach.py --sourceFile /path/to/inventory --destination google.com --port 443
 
 # Check multiple destinations (comma-separated)
-python inReach.py --sourceFile hosts.txt --destination google.com,8.8.8.8 --port 443
+python inReach.py --sourceFile /path/to/inventory --destination google.com,8.8.8.8 --port 443
+
+# Check connectivity in parallel (faster for large inventories)
+python inReach.py --sourceFile /path/to/inventory --destination google.com --parallel
+python inReach.py --sourceFile /path/to/inventory --destination google.com --parallel --workers 8
+
 
 # Show version
 python inReach.py --version
@@ -107,6 +133,8 @@ python inReach.py --version
 | `-s, --source` | Source host to check from (default: `localhost`) |
 | `-p, --port` | Port number (default: `443`) |
 | `-f, --sourceFile` | Path to hosts file — one per line or Ansible INI inventory |
+| `-w, --workers` | Max concurrent checks (default: 5) |         
+| `--parallel` | Run checks in parallel (default: sequential) |
 | `-v, --version` | Show version and exit |
 | `-h, --help` | Show help message |
 
@@ -191,7 +219,9 @@ SSH gateway banner noise (SSHgate warnings, known-hosts notices, etc.) is automa
 
 **Banner noise filtering** — Internal SSH gateways inject multi-line banners into stderr. inReach strips these before displaying results so the output stays clean regardless of what your SSH proxy emits.
 
-**Comma-separated destinations** — A single command can verify a source-file × destination matrix. All `(source, dest)` pairs are checked sequentially with a live spinner per pair and a summary at the end.
+**Comma-separated destinations** — A single command can verify a source-file × destination matrix. All `(source, dest)` pairs are checked sequentially by default, with a live spinner per pair and a summary at the end.
+
+**Parallel mode** — Pass `--parallel` to run checks concurrently instead of one-by-one. Uses Python's `concurrent.futures.ThreadPoolExecutor` (stdlib — no extra dependencies). Concurrency is capped via `--workers` (default: 5) to avoid overwhelming SSH gateways. Results print as each check completes, so fastest hosts appear first. Sequential mode remains the default to keep behaviour predictable on environments with strict SSH connection limits.
 
 **Exit code** — The CLI exits `0` if all checks pass, `1` if any fail — CI/CD and shell scripts can act on it directly.
 
