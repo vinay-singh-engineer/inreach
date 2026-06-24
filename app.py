@@ -1,8 +1,8 @@
 import os
-import socket
-import subprocess
 
 from flask import Flask, jsonify, render_template, request
+
+from connectivity import check_local, check_remote
 
 app = Flask(__name__)
 
@@ -22,55 +22,6 @@ def parse_inventory(path):
             if "=" not in host and ":" not in host:
                 hosts.add(host)
     return sorted(hosts)
-
-
-def check_local(dest, port):
-    try:
-        sock = socket.create_connection((dest, int(port)), timeout=5)
-        sock.close()
-        return True, f"Connection to {dest}:{port} succeeded"
-    except Exception as e:
-        return False, str(e)
-
-
-_BANNER_PREFIXES = (
-    "** ",
-    "***",
-    "Warning:",
-    "Connection ID:",
-    "SSHgate version:",
-    "https://",
-    "http://",
-)
-
-
-def _clean_output(raw: str) -> str:
-    """Strip SSH gateway banner lines; keep only nc-relevant output."""
-    lines = [
-        ln for ln in raw.splitlines()
-        if ln.strip() and not any(ln.strip().startswith(p) for p in _BANNER_PREFIXES)
-    ]
-    return " ".join(lines).strip()
-
-
-def check_remote(source, dest, port):
-    cmd = [
-        "ssh",
-        "-o", "ConnectTimeout=5",
-        "-o", "StrictHostKeyChecking=no",
-        "-o", "BatchMode=yes",
-        source,
-        f"nc -vz {dest} {port}",
-    ]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-        success = result.returncode == 0
-        output = _clean_output(result.stdout + result.stderr)
-        return success, output or ("Success" if success else "Failed — no output")
-    except subprocess.TimeoutExpired:
-        return False, "Timed out waiting for response"
-    except Exception as e:
-        return False, str(e)
 
 
 @app.route("/")

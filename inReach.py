@@ -12,8 +12,6 @@ Examples:
 """
 
 import argparse
-import socket
-import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -26,58 +24,11 @@ from rich.table import Table
 from rich.text import Text
 from rich.live import Live
 
+from connectivity import _clean_output, check_local, check_remote  # noqa: F401
+
 console = Console()
 
 _VERSION = (Path(__file__).parent / "VERSION").read_text().strip()
-
-_BANNER_PREFIXES = (
-    "** ",
-    "***",
-    "Warning:",
-    "Connection ID:",
-    "SSHgate version:",
-    "https://",
-    "http://",
-)
-
-
-def _clean_output(raw: str) -> str:
-    lines = [
-        ln for ln in raw.splitlines()
-        if ln.strip() and not any(ln.strip().startswith(p) for p in _BANNER_PREFIXES)
-    ]
-    return " ".join(lines).strip()
-
-
-def check_local(dest: str, port: int) -> tuple[bool, str]:
-    try:
-        t0 = time.time()
-        sock = socket.create_connection((dest, port), timeout=5)
-        sock.close()
-        ms = int((time.time() - t0) * 1000)
-        return True, f"Connected in {ms}ms"
-    except Exception as e:
-        return False, str(e)
-
-
-def check_remote(source: str, dest: str, port: int) -> tuple[bool, str]:
-    cmd = [
-        "ssh",
-        "-o", "ConnectTimeout=5",
-        "-o", "StrictHostKeyChecking=no",
-        "-o", "BatchMode=yes",
-        source,
-        f"nc -vz {dest} {port}",
-    ]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-        success = result.returncode == 0
-        output = _clean_output(result.stdout + result.stderr)
-        return success, output or ("Success" if success else "Failed")
-    except subprocess.TimeoutExpired:
-        return False, "Timed out"
-    except Exception as e:
-        return False, str(e)
 
 
 def parse_hosts_file(path: str) -> list[str]:
@@ -194,7 +145,10 @@ def multi_mode(pairs: list[tuple[str, str]], port: int, parallel: bool = False, 
             future_to_pair = {executor.submit(run_check, src, dst, port): (src, dst) for src, dst in pairs}
             for future in as_completed(future_to_pair):
                 src, dst = future_to_pair[future]
-                ok, msg = future.result()
+                try:
+                    ok, msg = future.result()
+                except Exception as e:
+                    ok, msg = False, str(e)
                 results.append((src, dst, ok, msg))
                 print_result_row(src, dst, port, ok, msg, col_src)
     else:
@@ -293,6 +247,10 @@ def main():
     if args.help or args.destination is None:
         print_help()
         sys.exit(0)
+
+    if not (1 <= args.port <= 65535):
+        console.print("[red]✘  Port must be between 1 and 65535.[/red]")
+        sys.exit(1)
 
     sources = []
     if args.sourceFile:
