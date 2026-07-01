@@ -1,11 +1,9 @@
-# inReach — requirements
+# inReach — runtime requirements
 # Covers both CLI (inReach.py) and Web (app.py)
+# To regenerate: pip-compile requirements.in
 
 # Web
-flask>=2.3.0
+flask==3.0.3
 
 # CLI
-rich>=13.0.0
-
-# Dev / CI
-pytest>=7.0.0
+rich==15.0.0
